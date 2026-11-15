@@ -47,6 +47,26 @@ Na primeira execução o PortMaster pode baixar o runtime `love_11.5` — deixe 
 ou instale qualquer outro port de LÖVE antes pelo próprio PortMaster.
 Se algo der errado, veja o arquivo `ports/nhacnhac/log.txt`.
 
+## Versão Atari 2600 (`.a26`)
+
+Também existe uma versão simplificada para Atari 2600, que roda no emulador de
+Atari do R36S, como qualquer outra ROM `.a26` (sem PortMaster).
+
+**Instalar:** copie [`dist/Nhac-Nhac.a26`](dist/Nhac-Nhac.a26) para a pasta
+**`atari2600`** do cartão SD de jogos e abra pelo menu **Atari 2600**.
+
+**Como jogar:** direcional para mover, **A** (ou START) para começar.
+Coma as 144 pastilhas e fuja dos dois besouros (BRASA, vermelho, e FADA, rosa).
+A **bolinha piscante** deixa os besouros azuis por alguns segundos: aí dá para
+comê-los (+20 pontos). Os corredores atravessam as bordas da tela.
+No alto: pontos (esquerda) e fase (direita). Embaixo: vidas.
+
+Por limitação do Atari (128 bytes de memória, cartucho de 4 KB), os besouros
+são mostrados alternadamente, então eles piscam, como em muitos jogos de Atari.
+
+O código-fonte está em `atari/` (assembly 6502). Para montar:
+`cd atari && python3 gen.py && dasm nhacnhac.asm -f3 -onhacnhac.a26`.
+
 ## Jogar no computador
 
 Instale o LÖVE 11.x e rode `love src` (setas/WASD para mover, Enter para começar, Esc para pausar).

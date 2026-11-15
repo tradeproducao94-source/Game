@@ -10,22 +10,25 @@ for ln in open(sys.argv[2]):
 a = Atari(open(sys.argv[1], "rb").read())
 def ram(name, off=0): return a.ram[(SYM[name] + off) & 0x7F]
 out = sys.argv[3]
+def shot(name):
+    a.render = True; a.run_frames(1); a.render = False
+    a.save_png(f"{out}/{name}.png")
 a.run_frames(40)
-a.save_png(f"{out}/title.png")
+shot("title")
 a.fire = True; a.run_frames(3); a.fire = False
 a.run_frames(20)
-a.save_png(f"{out}/start.png")
+shot("start")
 random.seed(1)
 dirs = [1, 2, 4, 8]
 log = []
 bad = set()
-for f in range(3000):
+for f in range(int(sys.argv[4]) if len(sys.argv) > 4 else 600):
     if f % 25 == 0:
         a.joy = random.choice(dirs)
     a.run_frames(1)
     st = ram("state")
     if f in (60, 400, 1200):
-        a.save_png(f"{out}/play{f}.png")
+        shot(f"play{f}")
     if st == 4:  # fim de jogo: começa outra
         log.append(("gameover", f, ram("score"), ram("score", 1)))
         a.fire = True; a.run_frames(2); a.fire = False

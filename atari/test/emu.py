@@ -68,6 +68,7 @@ class Atari:
         self.pos = {"P0": 0, "P1": 0, "BL": 0}
         self.last_image = None
         self.max_cycle_at_wsync = 0
+        self.render = False
 
     # ---- barramento ----
     def now(self):
@@ -151,9 +152,14 @@ class Atari:
 
     # ---- vídeo ----
     def finish_frame(self):
-        """Desenha o quadro a partir das escritas registradas."""
+        """Desenha o quadro a partir das escritas registradas (se pedido)."""
         w = self.writes
         self.writes = []
+        if not self.render:
+            for _, c, reg, val in w:
+                self.tia_frame_start = getattr(self, "tia_frame_start", [0] * 64)
+                self.tia_frame_start[reg] = val
+            return
         regs = list(self.tia_frame_start) if hasattr(self, "tia_frame_start") else [0] * 64
         pos = dict(self.pos)
         img = [[(0, 0, 0)] * 160 for _ in range(262)]

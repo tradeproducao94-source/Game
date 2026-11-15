@@ -397,6 +397,10 @@ Kernel:
     sta WSYNC               ; 22
     ldx #0
     ldy #76
+    jsr Wait12              ; escreve o PF0 da 1a parede só depois do meio da linha
+    jsr Wait12
+    jsr Wait12
+    jsr Wait12
     jmp WallBand
 
 MazeDone:
@@ -425,6 +429,8 @@ MazeDone:
     sta PF1
     jsr Wait12
     jsr Wait12
+    nop
+    nop
     nop
     nop
     nop
@@ -968,9 +974,9 @@ HeroMove:
     lda DirList,y
     and hwant
     beq .next
-    sty tmp+3
+    sty cabs
     jsr CanMove
-    ldy tmp+3
+    ldy cabs
     bcc .next
     lda DirList,y
     sta hdir
