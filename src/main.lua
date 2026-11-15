@@ -1,4 +1,4 @@
--- GULOSO - um jogo de labirinto para o R36S (LÖVE 11.x)
+-- NHAC-NHAC - um jogo de labirinto para o R36S (LÖVE 11.x)
 -- Coma todas as pastilhas, fuja dos besouros e use as pastilhas de poder
 -- para virar o jogo.
 
@@ -944,7 +944,7 @@ end
 local function drawHud()
   local x0 = OX + COLS * TILE + 8
   local cx = x0 + (W - x0) / 2
-  centerText("GULOSO", fonts.big, cx, 14, { 0.6, 1, 0.3 })
+  centerText("NHAC-NHAC", fonts.mid, cx, 20, { 0.6, 1, 0.3 })
   centerText("PONTOS", fonts.small, cx, 70, { 0.7, 0.7, 0.9 })
   centerText(tostring(game.score), fonts.mid, cx, 88)
   centerText("RECORDE", fonts.small, cx, 130, { 0.7, 0.7, 0.9 })
@@ -977,7 +977,7 @@ local function drawTitle()
   local t = game.clock
   local colors = { { 0.6, 1, 0.3 }, { 1, 0.85, 0.3 }, { 1, 0.45, 0.6 }, { 0.4, 0.85, 1 } }
   love.graphics.setFont(fonts.huge)
-  local title = "GULOSO"
+  local title = "NHAC-NHAC"
   local tw = fonts.huge:getWidth(title)
   local x = W / 2 - tw / 2
   for i = 1, #title do
@@ -994,7 +994,7 @@ local function drawTitle()
     setColor(color)
     love.graphics.print(text, x, y)
   end
-  leftText("GULOSO - você", fonts.mid, W / 2 - 115, 160, { 0.6, 1, 0.3 })
+  leftText("NHAC-NHAC - você", fonts.mid, W / 2 - 115, 160, { 0.6, 1, 0.3 })
   for i, g in ipairs(ghosts) do
     local y = 205 + (i - 1) * 36
     local fake = { def = g.def, dir = "right", state = "active", frightened = false, anim = g.anim }

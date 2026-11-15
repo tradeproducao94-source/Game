@@ -1,9 +1,9 @@
-# Guloso 🟢
+# Nhac-Nhac 🟢
 
 Jogo de labirinto no estilo "come-pastilhas" feito para o console portátil **R36S**
 (ArkOS, dArkOS, ROCKNIX, AmberELEC…), escrito em Lua com o [LÖVE](https://love2d.org) 11.5.
 
-Você controla o **Guloso**, um bichinho verde comilão. Coma todas as pastilhas do
+Você controla o **Nhac-Nhac**, um bichinho verde comilão. Coma todas as pastilhas do
 labirinto sem ser pego pelos quatro besouros:
 
 | Besouro | Comportamento |
@@ -31,21 +31,21 @@ labirinto sem ser pego pelos quatro besouros:
 
 Requisito: o **PortMaster** (já vem no ArkOS/dArkOS/ROCKNIX). Ele fornece o LÖVE automaticamente.
 
-1. Baixe [`dist/Guloso-R36S.zip`](dist/Guloso-R36S.zip) deste repositório.
+1. Baixe [`dist/Nhac-Nhac-R36S.zip`](dist/Nhac-Nhac-R36S.zip) deste repositório.
 2. Desligue o R36S, tire o cartão SD (o de jogos, partição `EASYROMS` no ArkOS) e coloque no computador.
 3. Extraia o zip **dentro da pasta `ports`** do cartão. Deve ficar assim:
    ```
    ports/
-   ├── Guloso.sh
-   └── guloso/
-       └── guloso.love
+   ├── Nhac-Nhac.sh
+   └── nhacnhac/
+       └── nhacnhac.love
    ```
-4. Recoloque o cartão, ligue o console e abra **Ports → Guloso**.
+4. Recoloque o cartão, ligue o console e abra **Ports → Nhac-Nhac**.
    (Se não aparecer, no EmulationStation use *Start → Game Settings → Update Games List* ou reinicie.)
 
 Na primeira execução o PortMaster pode baixar o runtime `love_11.5` — deixe o Wi-Fi ligado
 ou instale qualquer outro port de LÖVE antes pelo próprio PortMaster.
-Se algo der errado, veja o arquivo `ports/guloso/log.txt`.
+Se algo der errado, veja o arquivo `ports/nhacnhac/log.txt`.
 
 ## Jogar no computador
 
@@ -54,5 +54,5 @@ Instale o LÖVE 11.x e rode `love src` (setas/WASD para mover, Enter para começ
 ## Estrutura
 
 - `src/` – código do jogo (`main.lua`, `conf.lua`); gráficos e sons são gerados pelo código.
-- `port/Guloso.sh` – inicializador para o PortMaster.
-- `build.sh` – gera `port/guloso/guloso.love` e `dist/Guloso-R36S.zip`.
+- `port/Nhac-Nhac.sh` – inicializador para o PortMaster.
+- `build.sh` – gera `port/nhacnhac/nhacnhac.love` e `dist/Nhac-Nhac-R36S.zip`.

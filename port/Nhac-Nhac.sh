@@ -1,5 +1,5 @@
 #!/bin/bash
-# Guloso - inicializador para R36S (ArkOS, dArkOS, ROCKNIX, AmberELEC...) via PortMaster
+# Nhac-Nhac - inicializador para R36S (ArkOS, dArkOS, ROCKNIX, AmberELEC...) via PortMaster
 
 XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
 
@@ -17,7 +17,7 @@ source "$controlfolder/control.txt"
 [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
 get_controls
 
-GAMEDIR="/$directory/ports/guloso"
+GAMEDIR="/$directory/ports/nhacnhac"
 cd "$GAMEDIR" || exit 1
 > "$GAMEDIR/log.txt" && exec > >(tee "$GAMEDIR/log.txt") 2>&1
 
@@ -55,7 +55,7 @@ fi
 
 $GPTOKEYB "love" &
 type pm_platform_helper >/dev/null 2>&1 && pm_platform_helper "$LOVE_BINARY"
-"$LOVE_BINARY" "$GAMEDIR/guloso.love"
+"$LOVE_BINARY" "$GAMEDIR/nhacnhac.love"
 
 if [[ "$PM_CAN_MOUNT" != "N" ]]; then
   $ESUDO umount "$controlfolder/libs/${runtime}" 2>/dev/null
