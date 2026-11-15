@@ -1,2 +1,5 @@
 port/nhacnhac/savedata/
 port/nhacnhac/log.txt
+atari/*.lst
+atari/*.sym
+atari/test/__pycache__/
