@@ -49,23 +49,24 @@ Se algo der errado, veja o arquivo `ports/nhacnhac/log.txt`.
 
 ## Versão Atari 2600 (`.a26`)
 
-Também existe uma versão simplificada para Atari 2600, que roda no emulador de
-Atari do R36S, como qualquer outra ROM `.a26` (sem PortMaster).
+Versão para Atari 2600 com **o mesmo labirinto** da versão LÖVE. Roda no
+emulador de Atari do R36S (Stella), como qualquer ROM `.a26`, sem PortMaster.
 
 **Instalar:** copie [`dist/Nhac-Nhac.a26`](dist/Nhac-Nhac.a26) para a pasta
 **`atari2600`** do cartão SD de jogos e abra pelo menu **Atari 2600**.
 
 **Como jogar:** direcional para mover, **A** (ou START) para começar.
-Coma as 144 pastilhas e fuja dos dois besouros (BRASA, vermelho, e FADA, rosa).
-A **bolinha piscante** deixa os besouros azuis por alguns segundos: aí dá para
-comê-los (+20 pontos). Os corredores atravessam as bordas da tela.
-No alto: pontos (esquerda) e fase (direita). Embaixo: vidas.
+Coma as 167 pastilhas e fuja dos dois besouros (vermelho e rosa). As 4
+**pastilhas que piscam** deixam os besouros azuis por alguns segundos: aí dá
+para comê-los (+20 pontos), e eles voltam para a toca. O corredor do meio
+atravessa as bordas da tela. No alto: pontos (esquerda) e fase (direita).
+Embaixo: vidas. A cada fase os besouros ficam mais rápidos e o labirinto muda de cor.
 
-Por limitação do Atari (128 bytes de memória, cartucho de 4 KB), os besouros
-são mostrados alternadamente, então eles piscam, como em muitos jogos de Atari.
-
-O código-fonte está em `atari/` (assembly 6502). Para montar:
-`cd atari && python3 gen.py && dasm nhacnhac.asm -f3 -onhacnhac.a26`.
+Detalhes técnicos: cartucho de 8 KB com 128 bytes extras de RAM (formato
+F8SC/"Superchip", detectado automaticamente pelo Stella). Como o Atari só
+desenha um besouro por vez, os dois aparecem alternadamente (piscando).
+O código-fonte está em `atari/` (assembly 6502); o labirinto é lido de
+`src/main.lua`. Para montar: `cd atari && python3 gen.py && dasm nhacnhac.asm -f3 -onhacnhac.a26`.
 
 ## Jogar no computador
 

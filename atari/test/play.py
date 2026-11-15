@@ -18,7 +18,7 @@ shot("title")
 a.fire = True; a.run_frames(3); a.fire = False
 a.run_frames(20)
 shot("start")
-random.seed(1)
+random.seed(3)
 dirs = [1, 2, 4, 8]
 log = []
 bad = set()
@@ -34,9 +34,9 @@ for f in range(int(sys.argv[4]) if len(sys.argv) > 4 else 600):
         a.fire = True; a.run_frames(2); a.fire = False
     for e in range(2):
         x, y = ram("ex", e), ram("ey", e)
-        if (y + 4) % 8 and x % 8: bad.add(("enemy-off-grid", x, y))
+        if y % 8 and (x + 4) % 8: bad.add(("enemy-off-grid", x, y))
     hx, hy = ram("hx"), ram("hy")
-    if (hy + 4) % 8 and hx % 8: bad.add(("hero-off-grid", hx, hy))
+    if hy % 8 and (hx + 4) % 8: bad.add(("hero-off-grid", hx, hy))
 lines = a.frame_lines[3:]
 print("linhas por quadro: min", min(lines), "max", max(lines))
 print("ciclo máx. ao chegar no WSYNC:", a.max_cycle_at_wsync)

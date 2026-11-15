@@ -44,8 +44,11 @@ class Memory:
 
 class Atari:
     def __init__(self, rom):
-        assert len(rom) == 4096
+        assert len(rom) in (4096, 8192)
         self.rom = rom
+        self.banks = len(rom) // 4096
+        self.bank = self.banks - 1
+        self.scram = [0] * 128
         self.ram = [0] * 128
         self.tia = [0] * 64
         self.cycles = 0          # ciclos de CPU totais
@@ -64,7 +67,8 @@ class Atari:
         self.frames = 0
         self.mpu = MPU(memory=Memory(self))
         self.mpu.reset()
-        self.mpu.pc = rom[0xFFC] | rom[0xFFD] << 8
+        base = self.bank * 4096
+        self.mpu.pc = rom[base + 0xFFC] | rom[base + 0xFFD] << 8
         self.pos = {"P0": 0, "P1": 0, "BL": 0}
         self.last_image = None
         self.max_cycle_at_wsync = 0
@@ -74,10 +78,24 @@ class Atari:
     def now(self):
         return self.cycles + (self.mpu.processorCycles - self.base_cycles)
 
+    def cart(self, a, val=None):
+        if self.banks == 2:
+            if a == 0xFF8:
+                self.bank = 0
+            elif a == 0xFF9:
+                self.bank = 1
+            if a < 0x80:
+                if val is not None:
+                    self.scram[a] = val
+                return 0
+            if a < 0x100:
+                return self.scram[a - 0x80]
+        return self.rom[self.bank * 4096 + a]
+
     def read(self, addr):
         addr &= 0x1FFF
         if addr & 0x1000:
-            return self.rom[addr & 0xFFF]
+            return self.cart(addr & 0xFFF)
         if addr & 0x80 and not addr & 0x200:
             return self.ram[addr & 0x7F]
         if addr & 0x280 == 0x280:
@@ -101,6 +119,7 @@ class Atari:
     def write(self, addr, val):
         addr &= 0x1FFF
         if addr & 0x1000:
+            self.cart(addr & 0xFFF, val)
             return
         if addr & 0x80 and not addr & 0x200:
             self.ram[addr & 0x7F] = val

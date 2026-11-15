@@ -1,19 +1,15 @@
 ; =====================================================================
-;  NHAC-NHAC  -  jogo de labirinto para Atari 2600 (4 KB, NTSC)
-;  Monte com:  dasm nhacnhac.asm -f3 -onhacnhac.a26
+;  NHAC-NHAC  -  Atari 2600 (NTSC), cartucho F8SC: 8 KB + 128 bytes de RAM
+;  Mesmo labirinto da versão LÖVE (21 x 21 casas).
+;  Monte com:  python3 gen.py && dasm nhacnhac.asm -f3 -onhacnhac.a26
 ;
 ;  Joystick: mover    Botão / RESET: começar
-;  Coma todas as pastilhas e fuja dos besouros. A bolinha piscante deixa
-;  os besouros azuis por alguns segundos: aí dá para comê-los.
 ; =====================================================================
     processor 6502
 
-; ---- TIA (escrita) ----
 VSYNC   = $00
 VBLANK  = $01
 WSYNC   = $02
-NUSIZ0  = $04
-NUSIZ1  = $05
 COLUP0  = $06
 COLUP1  = $07
 COLUPF  = $08
@@ -26,7 +22,6 @@ PF1     = $0E
 PF2     = $0F
 RESP0   = $10
 RESP1   = $11
-RESBL   = $14
 AUDC0   = $15
 AUDC1   = $16
 AUDF0   = $17
@@ -35,326 +30,96 @@ AUDV0   = $19
 AUDV1   = $1A
 GRP0    = $1B
 GRP1    = $1C
-ENABL   = $1F
 HMP0    = $20
 HMP1    = $21
-HMBL    = $24
 HMOVE   = $2A
-HMCLR   = $2B
-CXCLR   = $2C
-; ---- TIA (leitura) ----
 INPT4   = $0C
-; ---- RIOT ----
 SWCHA   = $0280
 SWCHB   = $0282
 INTIM   = $0284
 TIM64T  = $0296
 
-; ---- Direções (mesmo formato do joystick invertido) ----
+SCW     = $F000         ; RAM extra: escrita
+SCR     = $F080         ; RAM extra: leitura
+BANK0   = $FFF8
+BANK1   = $FFF9
+
 D_UP    = 1
 D_DOWN  = 2
 D_LEFT  = 4
 D_RIGHT = 8
 
-; ---- Estados ----
 ST_TITLE = 0
 ST_PLAY  = 1
 ST_DYING = 2
 ST_CLEAR = 3
 ST_OVER  = 4
 
-HERO_START_X = 80
-HERO_START_Y = 68       ; corredor 8 (de baixo)
+LINES    = 168          ; 21 fileiras x 8 linhas
+HOME_X   = 76           ; coluna 10
+EXIT_Y   = 56           ; fileira 7 (em cima da toca)
+HOUSE_Y  = 72           ; fileira 9 (dentro da toca)
+KBOTTOM  = 3            ; linhas vazias no fim da tela
 
 ; =====================================================================
-;  RAM ($80-$FF)
+;  RAM principal
 ; =====================================================================
     SEG.U vars
     ORG $80
-pellets ds 36           ; 4 blocos de 9 corredores: PF1 esq, PF2 esq, PF1 dir, PF2 dir
-LP1L = pellets
-LP2L = pellets+9
-LP1R = pellets+18
-LP2R = pellets+27
-sc1     ds 5            ; placar já montado para o kernel
+buf     ds 6            ; linha de pastilhas da fileira atual (kernel)
+sc1     ds 5            ; placar montado
 sc2     ds 5
 sc3     ds 5
-p0a     ds 2            ; ponteiros dos sprites (linhas pares / ímpares)
-p0b     ds 2
-p1a     ds 2
-p1b     ds 2
-hx      ds 1            ; herói
+p0      ds 2            ; ponteiro do herói
+p1      ds 2            ; ponteiro do besouro
+hx      ds 1
 hy      ds 1
 hdir    ds 1
 hwant   ds 1
 hmoving ds 1
-ex      ds 2            ; besouros
+ex      ds 2
 ey      ds 2
 edir    ds 2
-ewait   ds 2            ; >0: esperando na toca
-eacc    ds 2            ; acumulador de velocidade
+ewait   ds 2
+eacc    ds 2
 frame   ds 1
 state   ds 1
 timer   ds 1
-score   ds 2            ; BCD: score = milhar/centena, score+1 = dezena/unidade
+score   ds 2
 lives   ds 1
-level   ds 1            ; BCD
-left    ds 1            ; pastilhas restantes
-fright  ds 1            ; quadros de besouro assustado
-ballLane ds 1           ; $FF = sem bolinha
-ballX   ds 1
-ballT   ds 1
-bdisp   ds 1            ; corredor onde a bolinha aparece neste quadro
+level   ds 1
+left    ds 1
+fright  ds 1
 rnd     ds 1
 snd0    ds 1
 snd1    ds 1
 snd1t   ds 1
-combo   ds 1
 lastfire ds 1
-shown   ds 1            ; besouro desenhado neste quadro
+shown   ds 1
+powEaten ds 1
 wallcolor ds 1
-pelcolor ds 1
-order   ds 4            ; ordem de direções a tentar (besouros)
+order   ds 4
 cabs    ds 2
 tmp     ds 4
 
 ; =====================================================================
-;  ROM
+;  BANCO 0: kernel e gráficos
 ; =====================================================================
-    SEG code
-    ORG $F000
+    SEG bank0
+    ORG $0000
+    RORG $F000
+    ds 256, 0               ; janela da RAM extra
 
-; ---- Faixa de PAREDE (8 linhas). X = índice da parede ----
-WallBand:
-    SUBROUTINE
-    lda WPF0,x
-    sta PF0
-WallA:
-    sta WSYNC
-    lda WPF1L,x         ; 4
-    sta PF1             ; 7
-    lda WPF2L,x         ; 11
-    sta PF2             ; 14
-    lda (p0a),y         ; 19+
-    sta GRP0            ; 22
-    lda (p1a),y         ; 27+
-    sta GRP1            ; 30
-    nop                 ; 32
-    nop                 ; 34
-    nop                 ; 36
-    nop                 ; 38
-    lda WPF1R,x         ; 42
-    sta PF1             ; 45
-    lda WPF2R,x         ; 49
-    sta PF2             ; 52
-    sta WSYNC
-    lda WPF1L,x
-    sta PF1
-    lda WPF2L,x
-    sta PF2
-    lda (p0b),y
-    sta GRP0
-    lda (p1b),y
-    sta GRP1            ; 30
-    dey                 ; 32
-    nop                 ; 34
-    nop                 ; 36
-    nop                 ; 38
-    lda WPF1R,x         ; 42
-    sta PF1             ; 45
-    lda WPF2R,x         ; 49
-    sta PF2             ; 52
-    tya                 ; 54
-    and #3              ; 56
-    bne WallA           ; 59
-    cpx #9              ; 60
-    bne LaneBand        ; 63
-    jmp MazeDone
-; ---- Faixa de CORREDOR (8 linhas). X = índice do corredor ----
-LaneBand:
-    SUBROUTINE
-    lda #0
-    sta PF0
-    sta WSYNC
-    ; linha 0
-    lda #0
-    sta PF1
-    sta PF2
-    lda (p0a),y
-    sta GRP0
-    lda (p1a),y
-    sta GRP1
-    sta WSYNC
-    ; linha 1
-    lda (p0b),y
-    sta GRP0
-    lda (p1b),y
-    sta GRP1
-    dey
-    lda pelcolor
-    sta COLUPF
-    lda #0
-    cpx bdisp
-    bne .nob
-    lda #2
-.nob:
-    sta ENABL
-    sta WSYNC
-    ; linha 2
-    lda (p0a),y
-    sta GRP0
-    lda (p1a),y
-    sta GRP1
-    sta WSYNC
-    ; linha 3 (pastilhas)
-    lda LP1L,x          ; 4
-    sta PF1             ; 7
-    lda LP2L,x          ; 11
-    sta PF2             ; 14
-    lda (p0b),y         ; 19+
-    sta GRP0            ; 22
-    lda (p1b),y         ; 27+
-    sta GRP1            ; 30
-    dey                 ; 32
-    nop                 ; 34
-    nop                 ; 36
-    nop                 ; 38
-    lda LP1R,x          ; 42
-    sta PF1             ; 45
-    lda LP2R,x          ; 49
-    sta PF2             ; 52
-    sta WSYNC
-    ; linha 4 (pastilhas)
-    lda LP1L,x
-    sta PF1
-    lda LP2L,x
-    sta PF2
-    lda (p0a),y
-    sta GRP0
-    lda (p1a),y
-    sta GRP1            ; 30
-    nop
-    nop
-    nop
-    nop                 ; 38
-    lda LP1R,x          ; 42
-    sta PF1             ; 45
-    lda LP2R,x          ; 49
-    sta PF2             ; 52
-    lda #0              ; 54
-    nop                 ; 56
-    nop                 ; 58
-    nop                 ; 60
-    nop                 ; 62
-    nop                 ; 64
-    nop                 ; 66
-    sta PF1             ; 69 (depois do fim do PF1 direito)
-    sta WSYNC
-    ; linha 5
-    lda #0
-    sta PF2
-    lda (p0b),y
-    sta GRP0
-    lda (p1b),y
-    sta GRP1
-    dey
-    sta WSYNC
-    ; linha 6
-    lda (p0a),y
-    sta GRP0
-    lda (p1a),y
-    sta GRP1
-    lda #0
-    sta ENABL
-    lda wallcolor
-    sta COLUPF
-    sta WSYNC
-    ; linha 7
-    lda (p0b),y
-    sta GRP0
-    lda (p1b),y
-    sta GRP1
-    dey
-    inx
-    jsr Wait12
-    jsr Wait12
-    jmp WallBand
-
-
-    MAC SLEEP2
-    nop
-    ENDM
-
-Reset:
-    SUBROUTINE
-    sei
-    cld
-    ldx #0
-    txa
-.clr:
-    dex
-    txs
-    pha
-    bne .clr
-    lda #$5A
-    sta rnd
-    jsr ResetPellets
-    jsr ResetPositions
-    lda #ST_TITLE
-    sta state
-    lda #1
-    sta lastfire
-
-; ---------------------------------------------------------------------
-MainLoop:
-    SUBROUTINE
-    lda #2
-    sta WSYNC
-    sta VSYNC
-    sta WSYNC
-    sta WSYNC
-    lda #0
-    sta WSYNC
-    sta VSYNC
-    lda #2
-    sta VBLANK
-    lda #44
-    sta TIM64T
-
-    jsr PrepareFrame
-
-.waitvb:
-    lda INTIM
-    bne .waitvb
-    sta WSYNC
-    lda #0
-    sta VBLANK
-
-    jsr Kernel
-
-    lda #2
-    sta VBLANK
-    lda #34
-    sta TIM64T
-    jsr GameUpdate
-    jsr Sound
-.waitos:
-    lda INTIM
-    bne .waitos
-    jmp MainLoop
-
-; =====================================================================
-;  KERNEL (192 linhas visíveis)
-; =====================================================================
 Kernel:
     SUBROUTINE
-    ; 8 linhas vazias
-    ldx #8
+    ldx #4
 .top:
     sta WSYNC
     dex
     bne .top
-
+    lda #0
+    sta CTRLPF
+    sta PF0
     ; ---- placar: 5 fileiras x 2 linhas ----
 .score:
     sta WSYNC
@@ -384,38 +149,146 @@ Kernel:
     inx
     cpx #5
     bne .score
-    sta WSYNC               ; linha 19
+    sta WSYNC
     lda #0
     sta PF1
     sta PF2
     lda wallcolor
     sta COLUPF
-    lda #$30                ; bolinha de 8 px, sem espelhar o playfield
+    lda #1                  ; playfield espelhado (paredes)
     sta CTRLPF
-    sta WSYNC               ; 20
-    sta WSYNC               ; 21
-    sta WSYNC               ; 22
     ldx #0
-    ldy #76
-    jsr Wait12              ; escreve o PF0 da 1a parede só depois do meio da linha
-    jsr Wait12
-    jsr Wait12
-    jsr Wait12
-    jmp WallBand
+    ldy #LINES
+
+; ---- uma fileira do labirinto = 8 linhas. X = fileira, Y = linha ----
+RowLoop:
+    SUBROUTINE
+    ; linha 0: paredes da fileira (espelhadas)
+    sta WSYNC
+    lda WallPF0,x
+    sta PF0
+    lda WallPF1,x
+    sta PF1
+    lda WallPF2,x
+    sta PF2
+    lda (p0),y
+    sta GRP0
+    lda (p1),y
+    sta GRP1
+    dey
+    ; linha 1: prepara as pastilhas (metade 1)
+    sta WSYNC
+    lda (p0),y
+    sta GRP0
+    lda (p1),y
+    sta GRP1
+    lda SCR,x
+    sta buf
+    lda SCR+21,x
+    sta buf+1
+    lda SCR+42,x
+    sta buf+2
+    dey
+    ; linha 2: prepara as pastilhas (metade 2)
+    sta WSYNC
+    lda (p0),y
+    sta GRP0
+    lda (p1),y
+    sta GRP1
+    lda SCR+63,x
+    sta buf+3
+    lda SCR+84,x
+    sta buf+4
+    lda SCR+105,x
+    sta buf+5
+    dey
+    ; linha 3: paredes + pastilhas (playfield assimétrico)
+    sta WSYNC
+    lda #0              ; 2
+    sta CTRLPF          ; 5
+    lda buf             ; 8
+    sta PF0             ; 11
+    lda buf+1           ; 14
+    sta PF1             ; 17
+    lda buf+2           ; 20
+    sta PF2             ; 23
+    lda (p0),y          ; 28+
+    sta GRP0            ; 31
+    lda (p1),y          ; 36+
+    sta GRP1            ; 39
+    lda buf+3           ; 42
+    sta PF0             ; 45
+    lda buf+4           ; 48
+    sta PF1             ; 51
+    lda buf+5           ; 54
+    sta PF2             ; 57
+    dey
+    ; linha 4: igual à 3
+    sta WSYNC
+    lda #0
+    sta CTRLPF
+    lda buf
+    sta PF0
+    lda buf+1
+    sta PF1
+    lda buf+2
+    sta PF2
+    lda (p0),y
+    sta GRP0
+    lda (p1),y
+    sta GRP1
+    lda buf+3
+    sta PF0
+    lda buf+4
+    sta PF1
+    lda buf+5
+    sta PF2
+    dey
+    ; linha 5: volta às paredes espelhadas
+    sta WSYNC
+    lda #1
+    sta CTRLPF
+    lda WallPF0,x
+    sta PF0
+    lda WallPF1,x
+    sta PF1
+    lda WallPF2,x
+    sta PF2
+    lda (p0),y
+    sta GRP0
+    lda (p1),y
+    sta GRP1
+    dey
+    ; linha 6
+    sta WSYNC
+    lda (p0),y
+    sta GRP0
+    lda (p1),y
+    sta GRP1
+    dey
+    ; linha 7
+    sta WSYNC
+    lda (p0),y
+    sta GRP0
+    lda (p1),y
+    sta GRP1
+    dey
+    inx
+    cpx #21
+    beq MazeDone
+    jmp RowLoop
 
 MazeDone:
     SUBROUTINE
-    sta WSYNC               ; fim da última linha do labirinto (174)
+    sta WSYNC
     lda #0
     sta PF0
     sta PF1
     sta PF2
     sta GRP0
     sta GRP1
-    sta ENABL
-    sta WSYNC               ; 175
-    sta WSYNC               ; 176
-    sta WSYNC               ; 177
+    sta CTRLPF
+    sta WSYNC
     ; vidas: 4 linhas
     ldy lives
     cpy #4
@@ -438,32 +311,121 @@ MazeDone:
     sta PF1
     dex
     bne .lives
-    sta WSYNC               ; 182
+    sta WSYNC
     lda #0
     sta PF1
-    ldx #10
+    ldx #KBOTTOM
 .bot:
     sta WSYNC
     dex
-    bne .bot                ; 191
+    bne .bot
     rts
 
 Wait12:
     SUBROUTINE
-    rts                     ; jsr+rts = 12 ciclos
+    rts
+
+LivesPF:
+    SUBROUTINE
+    .byte %00000000, %11000000, %11011000, %11011011
+
+    include "data0.inc"
+
+; ---- trampolim: o banco 1 lê BANK0 em $FFC0 e continua aqui em $FFC3 ----
+    ORG $0FC0
+    RORG $FFC0
+    lda BANK0
+    jsr Kernel              ; $FFC3
+    lda BANK1               ; $FFC6 -> continua no banco 1 em $FFC9
+    rts
+
+    ORG $0FE0
+    RORG $FFE0
+Start0:
+    SUBROUTINE
+    lda BANK1               ; -> banco 1, que continua em $FFE3
+    jmp Start0
+
+    ORG $0FFA
+    RORG $FFFA
+    .word Start0
+    .word Start0
+    .word Start0
 
 ; =====================================================================
-;  Preparação do quadro (no VBLANK)
+;  BANCO 1: lógica do jogo
+; =====================================================================
+    SEG bank1
+    ORG $1000
+    RORG $F000
+    ds 256, 0
+
+Start:
+    SUBROUTINE
+    sei
+    cld
+    ldx #0
+    txa
+.clr:
+    dex
+    txs
+    pha
+    bne .clr
+    lda #$5A
+    sta rnd
+    lda #1
+    sta lastfire
+    jsr ResetPellets
+    jsr ResetPositions
+    lda #ST_TITLE
+    sta state
+
+MainLoop:
+    SUBROUTINE
+    lda #2
+    sta WSYNC
+    sta VSYNC
+    sta WSYNC
+    sta WSYNC
+    lda #0
+    sta WSYNC
+    sta VSYNC
+    lda #2
+    sta VBLANK
+    lda #44
+    sta TIM64T
+    jsr PrepareFrame
+    jsr VBLogic
+.waitvb:
+    lda INTIM
+    bne .waitvb
+    sta WSYNC
+    lda #0
+    sta VBLANK
+    jsr CallKernel
+    lda #2
+    sta VBLANK
+    lda #34
+    sta TIM64T
+    jsr GameUpdate
+    jsr Sound
+.waitos:
+    lda INTIM
+    bne .waitos
+    jmp MainLoop
+
+; =====================================================================
+;  Preparação do quadro
 ; =====================================================================
 PrepareFrame:
     SUBROUTINE
     ; ---- herói ----
     ldx #FR_HERO_CLOSED
     lda hmoving
-    beq .hclosed
+    beq .hsel
     lda frame
     and #8
-    beq .hclosed
+    beq .hsel
     ldx #FR_HERO_SIDE
     lda hdir
     cmp #D_UP
@@ -471,17 +433,17 @@ PrepareFrame:
     ldx #FR_HERO_UP
 .h1:
     cmp #D_DOWN
-    bne .hclosed
+    bne .hsel
     ldx #FR_HERO_DOWN
-.hclosed:
+.hsel:
     lda state
     cmp #ST_DYING
-    bne .hnotdying
-    lda timer               ; pisca enquanto morre
+    bne .hok
+    lda timer
     and #4
-    beq .hnotdying
+    beq .hok
     ldx #FR_BLANK
-.hnotdying:
+.hok:
     lda #0
     ldy hdir
     cpy #D_LEFT
@@ -493,13 +455,13 @@ PrepareFrame:
     ldy #0
     jsr SetPtrs
 
-    ; ---- besouro deste quadro (alterna para mostrar os dois) ----
+    ; ---- besouro deste quadro (alternando) ----
     lda frame
     and #1
     tay
     sty shown
     lda EnemyColor,y
-    sta tmp
+    sta tmp+3
     ldx #FR_BUG_A
     lda frame
     and #8
@@ -512,7 +474,7 @@ PrepareFrame:
     bne .enorm
     ldx #FR_BUG_SCARED
     lda #$86
-    sta tmp
+    sta tmp+3
     lda fright
     cmp #90
     bcs .enorm
@@ -520,9 +482,9 @@ PrepareFrame:
     and #8
     beq .enorm
     lda #$0E
-    sta tmp
+    sta tmp+3
 .enorm:
-    lda ewait,y             ; na toca: pisca
+    lda ewait,y
     beq .eshow
     lda frame
     and #2
@@ -534,16 +496,15 @@ PrepareFrame:
     bne .eok
     ldx #FR_BLANK
 .eok:
-    ldy shown
     lda ey,y
-    ldy #4
+    ldy #2
     jsr SetPtrs
-    lda tmp
+    lda tmp+3
     sta COLUP1
     lda #$CA
     sta COLUP0
 
-    ; ---- posições horizontais ----
+    ; ---- posições ----
     lda hx
     ldx #0
     jsr PosObject
@@ -551,25 +512,8 @@ PrepareFrame:
     lda ex,y
     ldx #1
     jsr PosObject
-    lda ballX
-    ldx #4
-    jsr PosObject
     sta WSYNC
     sta HMOVE
-
-    ; ---- bolinha ----
-    lda #$FF
-    ldx ballLane
-    bmi .nb
-    lda frame
-    and #8
-    beq .nb2
-    txa
-    .byte $2C               ; pula o próximo lda #$FF
-.nb2:
-    lda #$FF
-.nb:
-    sta bdisp
 
     ; ---- placar / título ----
     lda state
@@ -588,7 +532,7 @@ PrepareFrame:
 .title:
     lda #0
     sta tmp+3
-    ldx #10                 ; N H A C
+    ldx #10
     ldy #11
     jsr Pair1
     ldx #12
@@ -624,7 +568,7 @@ PrepareFrame:
     and #$0F
     tay
     jsr Pair2
-    lda #10                 ; fase no lado direito (sc3)
+    lda #10
     sta tmp+3
     lda level
     lsr
@@ -648,14 +592,42 @@ PrepareFrame:
     and #3
     tax
     lda WallColors,x
+    ldy state
+    cpy #ST_CLEAR
+    bne .c2
+    lda timer               ; fase completa: labirinto pisca
+    and #8
+    beq .c2a
+    lda #$0E
+    bne .c2
+.c2a:
+    lda WallColors,x
+.c2:
     sta wallcolor
-    lda #$1C
-    sta pelcolor
     lda #0
     sta COLUBK
     rts
 
-; Monta 5 bytes de PF1 com os glifos X (esq.) e Y (dir.) em sc1+tmp+3
+; X = quadro, A = y, Y = 0 (herói) ou 2 (besouro)
+SetPtrs:
+    SUBROUTINE
+    cpx #FR_BLANK
+    bne .norm
+    lda #<GFX_BLANK
+    sta p0,y
+    lda #>GFX_BLANK
+    sta p0+1,y
+    rts
+.norm:
+    clc
+    adc FrameLo,x
+    sta p0,y
+    lda FrameHi,x
+    adc #0
+    sta p0+1,y
+    rts
+
+; 5 bytes de PF1 com os glifos X (esq.) e Y (dir.) em sc1+tmp+3
 Pair1:
     SUBROUTINE
     lda Mul5,x
@@ -685,7 +657,7 @@ Pair1:
     bne .p1
     rts
 
-; Monta sc2 (PF2 esquerdo, bits invertidos) com os glifos X e Y
+; 5 bytes de PF2 (bits invertidos) com os glifos X e Y em sc2
 Pair2:
     SUBROUTINE
     lda Mul5,x
@@ -713,39 +685,7 @@ Pair2:
     bne .p2
     rts
 
-; X = quadro, A = y, Y = 0 (herói) ou 4 (besouro)
-SetPtrs:
-    SUBROUTINE
-    cpx #FR_BLANK
-    bne .norm
-    lda #<BlankE
-    sta p0a,y
-    lda #>BlankE
-    sta p0a+1,y
-    lda #<BlankO
-    sta p0b,y
-    lda #>BlankO
-    sta p0b+1,y
-    rts
-.norm:
-    sta tmp+1
-    lda FrameELo,x
-    clc
-    adc tmp+1
-    sta p0a,y
-    lda FrameEHi,x
-    adc #0
-    sta p0a+1,y
-    lda FrameOLo,x
-    clc
-    adc tmp+1
-    sta p0b,y
-    lda FrameOHi,x
-    adc #0
-    sta p0b+1,y
-    rts
-
-; A = posição x (0-159), X = objeto (0=P0, 1=P1, 4=BL)
+; A = x (0-159), X = objeto (0 = P0, 1 = P1)
 PosObject:
     SUBROUTINE
     sta WSYNC
@@ -763,7 +703,7 @@ PosObject:
     rts
 
 ; =====================================================================
-;  Lógica (no overscan)
+;  Lógica
 ; =====================================================================
 GameUpdate:
     SUBROUTINE
@@ -774,8 +714,7 @@ GameUpdate:
     eor #$B4
 .r1:
     sta rnd
-
-    ; botão: fire ou RESET (só conta quando acabou de apertar)
+    ; botão (fire ou RESET), só na hora que aperta
     lda #0
     sta tmp+3
     ldx #0
@@ -796,7 +735,6 @@ GameUpdate:
     sta tmp+3
 .rel:
     stx lastfire
-.st:
     lda state
     cmp #ST_PLAY
     beq UpdPlay
@@ -808,7 +746,6 @@ GameUpdate:
     bne .s4
     jmp UpdClear
 .s4:
-    ; título ou fim de jogo: espera o botão
     lda tmp+3
     beq .idle
     jmp StartGame
@@ -821,16 +758,14 @@ UpdPlay:
     jsr EatPellet
     ldx #0
     jsr EnemyUpdate
-    ldx #1
-    jsr EnemyUpdate
     jsr Collide
-    jsr BallUpdate
+    jsr PowerBlink
     lda fright
     beq .nofr
     dec fright
 .nofr:
     lda left
-    bne .notclear
+    bne .nc
     lda #ST_CLEAR
     sta state
     lda #120
@@ -839,7 +774,19 @@ UpdPlay:
     sta snd1t
     lda #60
     sta snd1
-.notclear:
+.nc:
+    rts
+
+; segundo besouro: calculado no VBLANK, onde sobra tempo
+VBLogic:
+    SUBROUTINE
+    lda state
+    cmp #ST_PLAY
+    bne .x
+    ldx #1
+    jsr EnemyUpdate
+    jsr Collide
+.x:
     rts
 
 UpdDying:
@@ -901,20 +848,16 @@ StartGame:
 
 ResetPellets:
     SUBROUTINE
-    ldx #8
+    ldx #125
 .rp:
-    lda PelFull
-    sta LP1L,x
-    lda PelFull+1
-    sta LP2L,x
-    lda PelFull+2
-    sta LP1R,x
-    lda PelFull+3
-    sta LP2R,x
+    lda SCInit,x
+    sta SCW,x
     dex
     bpl .rp
     lda #PELLETS_TOTAL
     sta left
+    lda #0
+    sta powEaten
     rts
 
 ResetPositions:
@@ -926,30 +869,24 @@ ResetPositions:
     lda #D_LEFT
     sta hdir
     sta hwant
+    sta edir
+    lda #D_RIGHT
+    sta edir+1
     lda #0
     sta hmoving
     sta fright
     sta eacc
     sta eacc+1
-    lda #80
+    sta ewait
+    lda #HOME_X
     sta ex
     sta ex+1
-    lda #4                  ; corredor 0
+    lda #EXIT_Y
     sta ey
-    lda #36                 ; corredor 4
+    lda #HOUSE_Y
     sta ey+1
-    lda #D_LEFT
-    sta edir
-    lda #D_RIGHT
-    sta edir+1
-    lda #30
-    sta ewait
-    lda #150
+    lda #180
     sta ewait+1
-    lda #$FF
-    sta ballLane
-    lda #200
-    sta ballT
     rts
 
 ; ---- herói ----
@@ -968,7 +905,6 @@ HeroMove:
     sta tmp
     lda hy
     sta tmp+1
-    ; tenta as direções desejadas (cima, baixo, esquerda, direita)
     ldy #0
 .try:
     lda DirList,y
@@ -1001,73 +937,107 @@ HeroMove:
 .stop:
     rts
 
-; Entrada: tmp=x, tmp+1=y, A=direção. Saída: C=1 se pode andar. Preserva X.
+; tmp = x, tmp+1 = y, A = direção  ->  C = 1 se pode andar. Preserva X.
 CanMove:
     SUBROUTINE
     sta tmp+2
     txa
     pha
-    lda tmp+1
+    lda tmp
     clc
     adc #4
-    and #7
-    tax                     ; X = 0 se alinhado num corredor
+    cmp #160
+    bcc .w
+    sbc #160
+.w:
+    sta tmp+3               ; x + 4 (alinhado quando múltiplo de 8)
     lda tmp+2
     and #D_LEFT|D_RIGHT
     beq .vert
-    txa
+    lda tmp+1
+    and #7
+    bne .no                 ; fora de uma fileira: não anda na horizontal
+    lda tmp+3
+    and #7
+    bne .yes                ; no meio da casa: continua
+    lda tmp+3
+    lsr
+    lsr
+    lsr
+    ldy tmp+2
+    cpy #D_LEFT
+    bne .right
+    sec
+    sbc #1
+    bcs .cok
+    lda #19
+    bne .cok
+.right:
+    clc
+    adc #1
+    cmp #20
+    bcc .cok
+    lda #0
+.cok:
+    sta tmp+3
+    lda tmp+1
+    lsr
+    lsr
+    lsr
+    jmp .check
+.vert:
+    lda tmp+3
+    and #7
     bne .no
+    lda tmp+1
+    and #7
+    bne .yes
+    lda tmp+3
+    lsr
+    lsr
+    lsr
+    sta tmp+3
+    lda tmp+1
+    lsr
+    lsr
+    lsr
+    ldy tmp+2
+    cpy #D_UP
+    bne .down
+    sec
+    sbc #1
+    jmp .check
+.down:
+    clc
+    adc #1
+.check:                     ; A = fileira, tmp+3 = coluna
+    sta tmp+2
+    lda tmp+3
+    lsr
+    lsr
+    lsr
+    tax
+    lda Mul21,x
+    clc
+    adc tmp+2
+    tay
+    lda tmp+3
+    and #7
+    tax
+    lda WalkTbl,y
+    and BitMask,x
+    beq .no
 .yes:
     pla
     tax
     sec
     rts
-.vert:
-    lda tmp
-    and #7
-    bne .no
-    txa
-    bne .yes                ; no meio da passagem: pode seguir
-    lda tmp+1
-    sec
-    sbc #4
-    lsr
-    lsr
-    lsr                     ; corredor k
-    tay
-    lda tmp+2
-    and #D_DOWN
-    beq .up
-    iny                     ; parede de baixo = k+1
-.up:
-    sty tmp+3
-    lda tmp
-    lsr
-    lsr
-    lsr                     ; casa s
-    pha
-    lsr
-    lsr
-    lsr                     ; grupo 0..2
-    tax
-    lda Mul10,x
-    clc
-    adc tmp+3
-    tay
-    pla
-    and #7
-    tax
-    lda GapTbl,y
-    and BitMask,x
-    beq .no
-    jmp .yes
 .no:
     pla
     tax
     clc
     rts
 
-; Aplica um passo na direção A sobre tmp/tmp+1
 Step:
     SUBROUTINE
     cmp #D_UP
@@ -1103,47 +1073,132 @@ Step:
 
 EatPellet:
     SUBROUTINE
-    lda hx
-    and #7
-    bne .ne
     lda hy
+    and #7
+    beq .e0
+    rts
+.e0:
+    lda hx
     clc
     adc #4
+    cmp #160
+    bcc .e1
+    sbc #160
+.e1:
+    tay
     and #7
-    bne .ne
+    beq .e2
+    rts
+.e2:
+    tya
+    lsr
+    lsr
+    lsr
+    bne .e3
+    rts                     ; túnel
+.e3:
+    sta tmp                 ; coluna
     lda hy
-    sec
-    sbc #4
     lsr
     lsr
     lsr
-    sta tmp                 ; corredor
-    lda hx
-    lsr
-    lsr
-    lsr
-    tay                     ; casa
+    sta tmp+1               ; fileira
+    ; pastilha energética?
+    ldx #3
+.pw:
+    lda PowC,x
+    cmp tmp
+    bne .pn
+    lda PowR,x
+    cmp tmp+1
+    bne .pn
+    lda powEaten
+    and BitMask,x
+    bne .done
+    lda powEaten
+    ora BitMask,x
+    sta powEaten
+    ldy PowIdx,x
+    lda PowMask,x
+    eor #$FF
+    and SCR,y
+    sta SCW,y
+    dec left
+    lda #$05
+    jsr AddScore
+    jmp Frighten
+.pn:
+    dex
+    bpl .pw
+    ; pastilha comum
+    ldy tmp
     lda PelOff,y
-    bmi .ne
     clc
-    adc tmp
+    adc tmp+1
     tax
     lda PelMask,y
-    and pellets,x
-    beq .ne
+    and SCR,x
+    beq .done
     lda PelMask,y
     eor #$FF
-    and pellets,x
-    sta pellets,x
+    and SCR,x
+    sta SCW,x
     dec left
     lda #1
     jsr AddScore
     lda #5
     sta snd0
-.ne:
+.done:
     rts
 
-; Soma A (BCD) ao placar
+Frighten:
+    SUBROUTINE
+    lda level
+    and #$0F
+    cmp #7
+    bcc .f1
+    lda #7
+.f1:
+    tay
+    lda FrightTime,y
+    sta fright
+    lda #5
+    sta snd1t
+    lda #30
+    sta snd1
+    ldx #1
+.rev:
+    lda ewait,x
+    bne .rv
+    ldy edir,x
+    lda Opp,y
+    sta edir,x
+.rv:
+    dex
+    bpl .rev
+    rts
+
+; pastilhas energéticas piscam
+PowerBlink:
+    SUBROUTINE
+    lda frame
+    and #15
+    bne .pb
+    ldx #3
+.pl:
+    lda powEaten
+    and BitMask,x
+    bne .pk
+    ldy PowIdx,x
+    lda SCR,y
+    eor PowMask,x
+    sta SCW,y
+.pk:
+    dex
+    bpl .pl
+.pb:
+    rts
+
 AddScore:
     SUBROUTINE
     sed
@@ -1156,17 +1211,25 @@ AddScore:
     cld
     rts
 
-; ---- besouros (X = 0 ou 1) ----
+; ---- besouros ----
 EnemyUpdate:
     SUBROUTINE
     lda ewait,x
     beq .act
     dec ewait,x
+    bne .w
+    lda #HOME_X             ; sai da toca
+    sta ex,x
+    lda #EXIT_Y
+    sta ey,x
+    lda #D_LEFT
+    sta edir,x
+.w:
     rts
 .act:
     lda fright
     beq .spd
-    lda #130
+    lda #120
     bne .acc
 .spd:
     lda level
@@ -1186,11 +1249,10 @@ EnemyUpdate:
     sta tmp
     lda ey,x
     sta tmp+1
-    ; ponto de decisão?
-    lda tmp
+    lda ey,x
     and #7
     bne .cont
-    lda tmp+1
+    lda ex,x
     clc
     adc #4
     and #7
@@ -1214,8 +1276,7 @@ EnemyUpdate:
 .done:
     rts
 
-; Escolhe a direção do besouro X: persegue o herói (ou foge quando assustado).
-; Entrada: tmp/tmp+1 = posição do besouro.
+; persegue o herói (ou foge, se assustado). tmp/tmp+1 = posição do besouro
 ChooseDir:
     SUBROUTINE
     lda ex,x
@@ -1224,7 +1285,7 @@ ChooseDir:
     lda hx
     lsr
     sec
-    sbc tmp+2               ; dx/2 (com sinal)
+    sbc tmp+2
     ldy #D_RIGHT
     cmp #$80
     bcc .h
@@ -1235,9 +1296,13 @@ ChooseDir:
 .h:
     sty order
     sta cabs
+    lda ey,x
+    lsr
+    sta tmp+2
     lda hy
+    lsr
     sec
-    sbc ey,x                ; dy (com sinal)
+    sbc tmp+2
     ldy #D_DOWN
     cmp #$80
     bcc .v
@@ -1248,7 +1313,7 @@ ChooseDir:
 .v:
     sty order+1
     sta cabs+1
-    lda fright              ; assustado: inverte as preferências (foge)
+    lda fright
     beq .nf
     ldy order
     lda Opp,y
@@ -1257,7 +1322,7 @@ ChooseDir:
     lda Opp,y
     sta order+1
 .nf:
-    lda cabs                ; a maior distância vem primeiro
+    lda cabs
     cmp cabs+1
     bcs .hf
     lda order
@@ -1271,8 +1336,7 @@ ChooseDir:
     ldy order
     lda Opp,y
     sta order+3
-    ; o segundo besouro às vezes vagueia
-    cpx #1
+    cpx #1                  ; o segundo besouro às vezes vagueia
     bne .pick
     lda rnd
     cmp #60
@@ -1295,7 +1359,7 @@ ChooseDir:
     lda order,y
     sta cabs+1
     ldy edir,x
-    cmp Opp,y               ; nunca dá meia-volta por escolha
+    cmp Opp,y
     beq .skip
     lda cabs+1
     jsr CanMove
@@ -1308,12 +1372,11 @@ ChooseDir:
     lda cabs
     cmp #4
     bne .loop
-    ldy edir,x              ; beco: dá meia-volta
+    ldy edir,x
     lda Opp,y
     sta edir,x
     rts
 
-; ---- colisões herói x besouros ----
 Collide:
     SUBROUTINE
     ldx #1
@@ -1336,19 +1399,16 @@ Collide:
     eor #$FF
     adc #1
 .c2:
-    cmp #3
+    cmp #6
     bcs .next
     lda fright
     beq .die
-    ; come o besouro
     lda #$20
     jsr AddScore
-    lda #80
+    lda #HOME_X
     sta ex,x
-    lda #36
+    lda #HOUSE_Y
     sta ey,x
-    lda #D_LEFT
-    sta edir,x
     lda #150
     sta ewait,x
     lda #2
@@ -1368,90 +1428,6 @@ Collide:
     sta snd1t
     lda #90
     sta snd1
-    rts
-
-; ---- bolinha de poder ----
-BallUpdate:
-    SUBROUTINE
-    lda ballLane
-    bpl .active
-    dec ballT
-    bne .r
-    lda rnd                 ; aparece num corredor e casa sorteados
-    and #7
-    sta ballLane
-    lda rnd
-    lsr
-    lsr
-    lsr
-    and #15
-    tay
-    lda BallSlotX,y
-    sta ballX
-    lda #255
-    sta ballT
-.r:
-    rts
-.active:
-    dec ballT
-    bne .chk
-    lda #$FF
-    sta ballLane
-    lda #220
-    sta ballT
-    rts
-.chk:
-    lda hy
-    sec
-    sbc #4
-    sta tmp
-    and #7
-    bne .r
-    lda tmp
-    lsr
-    lsr
-    lsr
-    cmp ballLane
-    bne .r
-    lda hx
-    sec
-    sbc ballX
-    bcs .b1
-    eor #$FF
-    adc #1
-.b1:
-    cmp #6
-    bcs .r
-    ; pegou!
-    lda #$FF
-    sta ballLane
-    lda #230
-    sta ballT
-    lda level
-    and #$0F
-    cmp #7
-    bcc .b2
-    lda #7
-.b2:
-    tay
-    lda FrightTime,y
-    sta fright
-    lda #$05
-    jsr AddScore
-    lda #5
-    sta snd1t
-    lda #30
-    sta snd1
-    ldx #1
-.rev:
-    lda ewait,x
-    bne .rv
-    ldy edir,x
-    lda Opp,y
-    sta edir,x
-.rv:
-    dex
-    bpl .rev
     rts
 
 ; ---- sons ----
@@ -1482,7 +1458,7 @@ Sound:
     ldx snd1t
     cpx #1
     bne .t2
-    lda #12                 ; morte: som descendo
+    lda #12
     sta AUDC1
     lda #92
     sec
@@ -1494,7 +1470,7 @@ Sound:
 .t2:
     cpx #2
     bne .t5
-    lda #4                  ; comeu besouro: subindo
+    lda #4
     sta AUDC1
     lda snd1
     sta AUDF1
@@ -1502,14 +1478,14 @@ Sound:
 .t5:
     cpx #5
     bne .tune
-    lda #4                  ; bolinha
+    lda #4
     sta AUDC1
     lda snd1
     lsr
     sta AUDF1
     rts
 .tune:
-    lda #4                  ; musiquinha (início / fase completa)
+    lda #4
     sta AUDC1
     lda snd1
     lsr
@@ -1525,9 +1501,7 @@ Sound:
     sta AUDV1
     rts
 
-; =====================================================================
-;  Tabelas
-; =====================================================================
+; ---- tabelas ----
 DirList:
     SUBROUTINE
     .byte D_UP, D_DOWN, D_LEFT, D_RIGHT, D_UP, D_DOWN, D_LEFT, D_RIGHT
@@ -1540,9 +1514,9 @@ BitMask:
 Mul5:
     SUBROUTINE
     .byte 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65
-Mul10:
+Mul21:
     SUBROUTINE
-    .byte 0, 10, 20
+    .byte 0, 21, 42
 EnemyColor:
     SUBROUTINE
     .byte $46, $5A
@@ -1555,19 +1529,35 @@ FrightTime:
 WallColors:
     SUBROUTINE
     .byte $24, $84, $54, $C4
-LivesPF:
-    SUBROUTINE
-    .byte %00000000, %11000000, %11011000, %11011011
-BallSlotX:
-    SUBROUTINE
-    .byte 16, 24, 32, 40, 48, 56, 64, 72, 96, 104, 112, 120, 128, 136, 144, 152
 Tune:
     SUBROUTINE
     .byte 31, 23, 19, 15, 19, 23, 15, 12
 
-    include "data.inc"
+    include "data1.inc"
 
-    ORG $FFFA
-    .word Reset
-    .word Reset
-    .word Reset
+; ---- trampolim para o kernel (banco 0) ----
+    ORG $1FC0
+    RORG $FFC0
+CallKernel:
+    SUBROUTINE
+    lda BANK0               ; -> banco 0, que executa jsr Kernel / lda BANK1
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    rts                     ; $FFC9 (de volta no banco 1)
+
+    ORG $1FE0
+    RORG $FFE0
+Start1:
+    SUBROUTINE
+    lda BANK1
+    jmp Start
+
+    ORG $1FFA
+    RORG $FFFA
+    .word Start1
+    .word Start1
+    .word Start1
