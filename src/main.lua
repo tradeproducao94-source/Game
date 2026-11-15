@@ -325,6 +325,7 @@ local function startLevel(first)
 end
 
 local function loadHiscore()
+  if not love.filesystem.getInfo("hiscore.txt") then return 0 end
   local ok, data = pcall(love.filesystem.read, "hiscore.txt")
   return (ok and tonumber(data)) or 0
 end
@@ -753,7 +754,8 @@ function love.keypressed(key)
     if game.state == "play" or game.state == "paused" then onStartButton() end
   elseif key == "escape" then
     if game.state == "play" then onStartButton()
-    elseif game.state == "title" then love.event.quit()
+    elseif game.state == "title" then
+      if love.system.getOS() ~= "Web" then love.event.quit() end
     else game.state = "title"; stopLoops() end
   end
 end
@@ -769,6 +771,27 @@ function love.gamepadpressed(j, button)
   elseif button == "back" and game.state == "paused" then
     game.state = "title"
   end
+end
+
+-- Toque / mouse: deslize para mudar de direção, toque para começar ou pausar
+local swipe
+function love.mousepressed(x, y)
+  swipe = { x = x, y = y, moved = false }
+end
+
+function love.mousemoved(x, y)
+  if not swipe then return end
+  local dx, dy = x - swipe.x, y - swipe.y
+  if dx * dx + dy * dy > 18 * 18 then
+    if math.abs(dx) > math.abs(dy) then player.want = dx > 0 and "right" or "left"
+    else player.want = dy > 0 and "down" or "up" end
+    swipe.x, swipe.y, swipe.moved = x, y, true
+  end
+end
+
+function love.mousereleased()
+  if swipe and not swipe.moved and game.state ~= "play" then onStartButton() end
+  swipe = nil
 end
 
 function love.joystickpressed(j, button)
